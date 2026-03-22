@@ -1,4 +1,4 @@
-# Aufgabengenerator
+# Exercises Generator
 
 A Flutter app for teachers that transforms text through configurable operations — useful for generating reading and spelling exercises from existing material.
 
@@ -42,12 +42,14 @@ flutter test
 ## Building
 
 **Android APK**
+
 ```sh
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
 **Windows**
+
 ```sh
 flutter build windows --release
 # Output: build/windows/x64/runner/Release/
