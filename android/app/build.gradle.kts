@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -8,7 +10,7 @@ plugins {
 // Load key.properties if it exists (written by CI from repository secrets).
 // Falls back to debug signing when the file is absent (local dev builds).
 val keyPropertiesFile = rootProject.file("key.properties")
-val keyProperties = java.util.Properties().apply {
+val keyProperties = Properties().apply {
     if (keyPropertiesFile.exists()) load(keyPropertiesFile.inputStream())
 }
 
@@ -22,17 +24,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
     }
 
     signingConfigs {
         if (keyPropertiesFile.exists()) {
             create("release") {
-                keyAlias = keyProperties["keyAlias"] as String
-                keyPassword = keyProperties["keyPassword"] as String
-                storeFile = file(keyProperties["storeFile"] as String)
-                storePassword = keyProperties["storePassword"] as String
+                keyAlias = keyProperties["keyAlias"].toString()
+                keyPassword = keyProperties["keyPassword"].toString()
+                storeFile = file(keyProperties["storeFile"].toString())
+                storePassword = keyProperties["storePassword"].toString()
             }
         }
     }
