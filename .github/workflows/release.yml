@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 1.2.3) — tag v{version} will be created"
+        required: true
+        type: string
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter test
+
+  build-android:
+    name: Build Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Write key.properties and decode the keystore when the secret is set.
+      # When absent the script is a no-op and Gradle falls back to debug signing.
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 not set — falling back to debug signing"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+          {
+            echo "storeFile=../keystore.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Build APK
+        run: >
+          flutter build apk --release
+          --build-name=${{ inputs.version }}
+          --build-number=${{ github.run_number }}
+
+      - name: Rename artifact
+        run: >
+          mv build/app/outputs/flutter-apk/app-release.apk
+          aufgabengenerator-${{ inputs.version }}-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: aufgabengenerator-${{ inputs.version }}-android.apk
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build Windows
+        run: >
+          flutter build windows --release
+          --build-name=${{ inputs.version }}
+          --build-number=${{ github.run_number }}
+
+      - name: Zip build output
+        shell: pwsh
+        run: >
+          Compress-Archive
+          -Path build/windows/x64/runner/Release/*
+          -DestinationPath aufgabengenerator-${{ inputs.version }}-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: aufgabengenerator-${{ inputs.version }}-windows.zip
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/aufgabengenerator-${{ inputs.version }}-android.apk
+            artifacts/aufgabengenerator-${{ inputs.version }}-windows.zip
